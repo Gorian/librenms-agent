@@ -38,9 +38,7 @@ FORMAT_WIDTH = 30
 # DEFINE FUNCTIONS
 ################################################################################
 def argparse_type_log_level(argument):
-    """Defines a custom argparse argument type
-
-    Defines a valid logging level
+    """argparse: Defines a valid logging level
 
     Args:
         argument: the argument passed to the parameter being checked by argparse
@@ -62,9 +60,7 @@ def argparse_type_log_level(argument):
             .format(argument))
 
 def argparse_type_package_manager(argument):
-    """Defines a custom argparse argument type
-
-    Defines a valid package manager options
+    """argeparse: Defines a valid package manager options
 
     Args:
         argument: the argument passed to the parameter being checked by argparse
@@ -73,8 +69,8 @@ def argparse_type_package_manager(argument):
         package manager as a command
 
     Raises:
-        argparse.ArgumentTypeError: argument must be a valid logging level
-            either a valid string or integer log level
+        argparse.ArgumentTypeError: argument must be in the list of supported
+        package managers. 
     """
     supported_PMs=["apt", "yum"]
     if str(argument) in supported_PMs:
@@ -82,6 +78,27 @@ def argparse_type_package_manager(argument):
     else:
         raise argparse.ArgumentTypeError("\"{0}\" is not supported by {1}"\
             .format(argument, SCRIPT_NAME))
+
+def argparse_type_verify_server(argument):
+    """argeparse: verifies the server
+
+    Args:
+        argument: the argument passed to the parameter being checked by argparse
+
+    Returns:
+        ip or hostname of LibreNMS server or polling node
+
+    Raises:
+        argparse.ArgumentTypeError: argument must be a valid IP or hostname
+    """
+    server = argument
+    response = os.system("ping -c 1 {0} >/dev/null 2>&1".format(server))
+    if response == 0:
+        return argument
+    else:
+        raise argparse.ArgumentTypeError("unable to connect to \"{0}\""\
+            .format(server))
+
 
 
 def main():
@@ -120,6 +137,10 @@ def main():
     arggroup_options.add_argument("--package-manager",
         help="package manager to use on host",
         type=argparse_type_package_manager, required=False)
+
+    arggroup_options.add_argument("--server",
+        help="LibreNMS server / polling node to attache to",
+        type=argparse_type_verify_server, required=False)
 
     arggroup_options.add_argument("--snmps_extend",
         help="install snmpd extension scripts", action="store_true",
