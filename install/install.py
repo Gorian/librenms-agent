@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 ################################################################################
+# LibreNMS Client Install Script
 # Layne "Gorian" Breitkreutz
+# Sets up the client for monitoring with LibreNMS
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -33,7 +35,7 @@ from logging.handlers import RotatingFileHandler
 # DEFINE GLOBAL CONSTANTS
 ################################################################################
 SCRIPT = {}
-SCRIPT["name"] = "Test Script"
+SCRIPT["name"] = "LibreNMS Client Install Script"
 SCRIPT["version"] = "0.0.1"
 SCRIPT["execution"] = os.path.basename(__file__)
 HOSTNAME = socket.gethostname()
@@ -43,25 +45,97 @@ HOME_DIRECTORY = os.path.expanduser('~')
 COLUMNS = os.getenv("COLUMNS",80)
 FORMAT_WIDTH = 30
 
+DEFAULTS = {}
+DEFAULTS["snmpd_extend"] = "/etc/snmp/extends.d"
+DEFAULTS["agent_dir"] = "/usr/lib/check_mk/local"
+
+OS={}
 
 ################################################################################
 # DEFINE CLASSES
 ################################################################################
-class Person(object):
-    def __init__(self, name='', food=''):
+
+class OperatingSystem(object):
+
+    def __init__(self, name, package_manager,
+        description="an operating system", snmpd_pkgs=""):
         self.name = name
-        self.food = food
+        self.description = description
+        self.package_manager = package_manager
+        self.snmpd_pkgs = snmpd_pkgs
 
     def test(self):
-        print("user's name is \"{0}\" and their favorite food is \"{1}\"")\
-            .format(self.name, self.food)
+        print("My OS is \"{0}\", and my package manager is \"{1}\"")\
+            .format(self.name,self.package_manager)
+        print("My snmpd package is \"{0}\"").format(self.snmpd_pkgs)
+        print("\"{0}\" is \"{1}\"").format(self.name,self.description)
 
 
 
 ################################################################################
 # DEFINE FUNCTIONS
 ################################################################################
+def argparse_type_log_level(argument):
+    """argparse: Defines a valid logging level
 
+    Args:
+        argument: the argument passed to the parameter being checked by argparse
+
+    Returns:
+        logging level as an integer
+
+    Raises:
+        argparse.ArgumentTypeError: argument must be a valid logging level
+            either a valid string or integer log level
+    """
+    if str(argument).isdigit() and argument in list(range(10, 60, 10)):
+        return argument
+    elif str(argument).upper() in ["DEBUG", "INFO", "WARNING", "ERROR",
+    "CRITICAL"]:
+        return getattr(logging, argument.upper())
+    else:
+        raise argparse.ArgumentTypeError("\"{0}\" not a valid log level"\
+            .format(argument))
+
+def argparse_type_package_manager(argument):
+    """argeparse: Defines a valid package manager options
+
+    Args:
+        argument: the argument passed to the parameter being checked by argparse
+
+    Returns:
+        package manager as a command
+
+    Raises:
+        argparse.ArgumentTypeError: argument must be in the list of supported
+        package managers. 
+    """
+    supported_PMs=["apt", "yum"]
+    if str(argument) in supported_PMs:
+        return argument
+    else:
+        raise argparse.ArgumentTypeError("\"{0}\" is not supported by {1}"\
+            .format(argument, SCRIPT["name"]))
+
+def argparse_type_verify_server(argument):
+    """argeparse: verifies the server
+
+    Args:
+        argument: the argument passed to the parameter being checked by argparse
+
+    Returns:
+        ip or hostname of LibreNMS server or polling node
+
+    Raises:
+        argparse.ArgumentTypeError: argument must be a valid IP or hostname
+    """
+    server = argument
+    response = os.system("ping -c 1 {0} >/dev/null 2>&1".format(server))
+    if response == 0:
+        return argument
+    else:
+        raise argparse.ArgumentTypeError("unable to connect to \"{0}\""\
+            .format(server))
 
 def main():
     """program entry point
@@ -80,8 +154,40 @@ def main():
         description="LibreNMS client install script", add_help=False)
     arggroup_options = parser.add_argument_group("options")
 
-    arggroup_options.add_argument("--name",
-        help="user name", type=str, required=False)
+    arggroup_options.add_argument("--operating-system",
+        help="Host Operating System", type=str,
+        dest="operating_system", required=False)
+
+    arggroup_options.add_argument("--systemd",
+        help="prefer systemd", action="store_true", default=False,
+        dest="systemd", required=False)
+
+    arggroup_options.add_argument("--collectd",
+        help="install and config collectd", action="store_true", default=False,
+        dest="collectd", required=False)
+
+    arggroup_options.add_argument("--check_mk",
+        help="install check_mk", action="store_true", default=False,
+        dest="check_mk", required=False)
+
+    arggroup_options.add_argument("--modules", nargs='+',
+        help="list of modules to install for monitoring",
+        required=False)
+
+    arggroup_options.add_argument("--server",
+        help="LibreNMS server / polling node to attach to",
+        type=argparse_type_verify_server, required=False)
+
+    arggroup_options.add_argument("--snmpd-extend-dir",
+        help="install snmpd extension scripts. Default: {0}"\
+        .format(DEFAULTS["snmpd_extend"]), type=str,
+        default=DEFAULTS["snmpd_extend"],
+        dest="snmpd_extend_dir", required=False)
+
+    arggroup_options.add_argument("-l", "--log-file",
+        help="specifies the file to log to.",
+        metavar="FILE", dest="logging_file", type=str,
+        required=False)
 
     arggroup_options.add_argument("-d", "--debug",
         help="enables debug messages. Sets logging level to DEBUG.",
@@ -103,20 +209,34 @@ def main():
     # parse the arguments and assign them to "args"
     args = parser.parse_args()
 
+    # set our defaults
+
+
     data=yaml.load("""
-    !!python/object:__main__.Person
-    Gorian:
-        name: Gorian
-        food: pasta
-    Murrant:
-        name: Murrant
-        food: pizza
+    !!python/object:__main__.OperatingSystem
+    ubuntu:
+        name: Ubuntu
+        package_manager: apt-get
+        description: A debian based operating system by Canonical
+        snmpd_pkgs: snmpd
+    centos:
+        name: CentOS
+        package_manager: yum
+        smpd_pkgs: net-snmpd
+    debian:
+        name: Debian
+        package_manager: apt-get
+        description: Debian is linux operating system
+        snmpd_pkgs: snmpd
+    amzn:
+        name: Amazon Linux
+        package_manager: yum
+        description: Amazon's custom CentOS based linux OS
     """)
-
-    #user = getattr(Persons, args.name)
-    user = Person(**getattr(data, args.name))
-    user.test()
-
+    # Install SNMPD
+    # pkg_install(args.package_manager, snmpd)
+    _os = OperatingSystem(**getattr(data, args.operating_system))
+    _os.test()
 
     if args.debug:
         print("\nDEBUG INFO")
