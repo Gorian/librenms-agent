@@ -29,6 +29,7 @@ import datetime
 import argparse
 import socket
 import yaml
+import urllib
 from logging.handlers import RotatingFileHandler
 
 ################################################################################
@@ -48,8 +49,8 @@ FORMAT_WIDTH = 30
 DEFAULTS = {}
 DEFAULTS["snmpd_extend"] = "/etc/snmp/extends.d"
 DEFAULTS["agent_dir"] = "/usr/lib/check_mk/local"
-
-OS={}
+DEFAULTS["github_url"] = "https://raw.githubusercontent.com/Gorian/librenms-agent/client-install/install/"
+DEFAULTS["os_yaml"] = "os.yaml"
 
 ################################################################################
 # DEFINE CLASSES
@@ -58,7 +59,7 @@ OS={}
 class OperatingSystem(object):
 
     def __init__(self, name, package_manager,
-        description="an operating system", snmpd_pkgs=""):
+        description="an operating system", snmpd_pkgs="", xinetd_pkgs=""):
         self.name = name
         self.description = description
         self.package_manager = package_manager
@@ -211,30 +212,13 @@ def main():
 
     # set our defaults
 
+    # we fetch the yaml file hosted on github
+    response = urllib.urlopen("{0}{1}".format(DEFAULTS["github_url"],
+        DEFAULTS["os_yaml"]))
+    data=yaml.load(response.read())
 
-    data=yaml.load("""
-    !!python/object:__main__.OperatingSystem
-    ubuntu:
-        name: Ubuntu
-        package_manager: apt-get
-        description: A debian based operating system by Canonical
-        snmpd_pkgs: snmpd
-    centos:
-        name: CentOS
-        package_manager: yum
-        smpd_pkgs: net-snmpd
-    debian:
-        name: Debian
-        package_manager: apt-get
-        description: Debian is linux operating system
-        snmpd_pkgs: snmpd
-    amzn:
-        name: Amazon Linux
-        package_manager: yum
-        description: Amazon's custom CentOS based linux OS
-    """)
-    # Install SNMPD
-    # pkg_install(args.package_manager, snmpd)
+    # we instantiate our objects from the yaml file, as OperatingSystem
+    # objects
     _os = OperatingSystem(**getattr(data, args.operating_system))
     _os.test()
 
