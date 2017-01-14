@@ -1,0 +1,19 @@
+!!python/object:__main__.OperatingSystem
+ubuntu:
+    name: Ubuntu
+    package_manager: apt-get
+    description: A debian based operating system by Canonical
+    snmpd_pkgs: snmpd
+centos:
+    name: CentOS
+    package_manager: yum
+    smpd_pkgs: net-snmpd
+debian:
+    name: Debian
+    package_manager: apt-get
+    description: Debian is linux operating system
+    snmpd_pkgs: snmpd
+amzn:
+    name: Amazon Linux
+    package_manager: yum
+    description: Amazon's custom CentOS based linux OS
